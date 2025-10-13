@@ -1,0 +1,381 @@
+# esphome: para definir los metadatos y configuraciones generales del dispositivo.
+esphome:
+  name: ws43-esphome
+  friendly_name: ws43-esphome
+  min_version: 2025.9.3
+  platformio_options:
+    build_unflags: -Werror=all
+    board_build.flash_mode: dio
+    build_flags: "-DBOARD_HAS_PSRAM" 
+    board_build.esp-idf.memory_type: qio_opi 
+    board_upload.maximum_ram_size: 524288 
+    board_build.flash_size: 8MB 
+
+# ajustes específicos del microcontrolador,
+esp32:
+  board: esp32-s3-devkitc-1
+  variant: esp32s3
+  flash_size: 8MB
+  cpu_frequency : 240MHz
+  framework:
+    type: esp-idf
+    version: 5.4.2
+    platform_version: 54.03.21
+    sdkconfig_options:
+      CONFIG_ESP32S3_DATA_CACHE_64KB: "y"
+      CONFIG_ESPTOOLPY_FLASHSIZE_8MB: "y"
+      CONFIG_FREERTOS_HZ: "1000"
+      CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240: y
+      CONFIG_ESPTOOLPY_FLASHMODE_QIO: y
+      CONFIG_ESPTOOLPY_FLASHFREQ_80M: y
+      CONFIG_SPIRAM_MODE_OCT: y
+      CONFIG_IDF_EXPERIMENTAL_FEATURES: y
+      CONFIG_SPIRAM_SPEED_80M: y
+      CONFIG_SPIRAM_FETCH_INSTRUCTIONS: y
+      CONFIG_SPIRAM_RODATA: y
+      CONFIG_ESP32S3_DATA_CACHE_LINE_64B: y
+      CONFIG_COMPILER_OPTIMIZATION_PERF: y
+    advanced:
+      enable_idf_experimental_features: False
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  password: ""
+
+ota:
+  - platform: esphome
+    password: ""
+    # Desactivar momentáneamente el LVGL durante OTA
+    on_begin:
+      then:
+        - logger.log: "OTA iniciada: deteniendo render LVGL"
+        - lambda: |-
+            lv_disp_trig_activity(NULL);
+    on_end:
+      then:
+        - logger.log: "OTA finalizada: reanudando LVGL"
+    
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Ws43-Esphome Fallback Hotspot"
+    password: "y2BHxEEDm4Y1"
+
+captive_portal:
+
+# Definición de scripts para el cronómetro
+script:
+  - id: toggle_crono
+    then:
+      - if:
+          condition:
+            lambda: 'return id(crono_running);'
+          then:
+            # Si está corriendo → pausamos
+            - lambda: |-
+                id(crono_running) = false;
+                lv_label_set_text(id(lbl_btn_start), "Iniciar");
+                lv_obj_set_style_bg_color(id(btn_start), lv_color_hex(0x00A000), LV_PART_MAIN);  // Verde
+          else:
+            # Si está detenido → iniciamos
+            - lambda: |-
+                id(crono_running) = true;
+                lv_label_set_text(id(lbl_btn_start), "Pausar");
+                lv_obj_set_style_bg_color(id(btn_start), lv_color_hex(0xA00000), LV_PART_MAIN);  // Rojo
+  - id: reset_crono
+    then:
+      - lambda: |-
+          id(crono_running) = false;
+          id(crono_seconds) = 0;
+          lv_label_set_text(id(lbl_crono), "00:00:00");
+          lv_label_set_text(id(lbl_btn_start), "Iniciar");
+          lv_obj_set_style_bg_color(id(btn_start), lv_color_hex(0x00A000), LV_PART_MAIN);  // Volver a verde
+
+# Definición de variables globales
+globals:
+  - id: crono_running
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: crono_seconds
+    type: int
+    restore_value: no
+    initial_value: "0"
+
+# Componente Web Server 
+#web_server:
+#  port: 80
+
+# Obtener la hora y fecha actual
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: Europe/Madrid
+
+# PSRAM (Pseudo Static RAM) integrada en el ESP32-S3
+psram:
+  mode: octal
+  speed: 80MHz
+# Expansor de E/S (entradas/salidas) modelo CH422G
+ch422g:
+  - id: io_ex
+
+# Conexiones I2C 
+i2c:
+  sda: 8
+  scl: 9
+  frequency: 400kHz
+  scan: false
+  id: bus_a    
+
+# El switch: controla el encendido/apagado total del backlight a través del expansor CH422G
+# Crear interruptores controlables
+switch:
+  - platform: gpio
+    name: "Backlight Switch"
+    id: display_backlight
+    pin: 
+      ch422g: io_ex       # ID del expansor CH422G (definido en otro bloque)
+      number: 2           # Número de pin del expansor (0–15)
+      mode: OUTPUT        # opcional, asegura dirección correcta
+      inverted: false     # opcional, si el backlight es activo en bajo, pon true
+    restore_mode: ALWAYS_ON
+    internal: False
+    
+# Touch screen
+touchscreen:
+  platform: gt911
+  address: 0x5D
+  id: my_touchscreen
+  interrupt_pin: 4
+  reset_pin:
+    ch422g: io_ex
+    number: 1
+  
+# Display
+display:
+  - platform: rpi_dpi_rgb
+    id: my_display
+    update_interval: never
+    auto_clear_enabled: false
+    color_order: RGB
+    pclk_frequency: 16MHz
+    dimensions:
+      width: 800
+      height: 480
+    reset_pin:
+      ch422g: io_ex
+      number: 3
+    de_pin:
+      number: 5
+    hsync_pin:
+      number: 46
+      ignore_strapping_warning: true
+    vsync_pin:
+      number: 3
+      ignore_strapping_warning: true
+    pclk_pin: 7
+    pclk_inverted: true
+    hsync_back_porch: 8
+    hsync_front_porch: 8
+    hsync_pulse_width: 4
+    vsync_back_porch: 16
+    vsync_front_porch: 16
+    vsync_pulse_width: 4
+    data_pins:
+      red:
+        - 1         #r3.
+        - 2         #r4.
+        - 42        #r5
+        - 41        #r6
+        - 40        #r7
+      blue:
+        - 14        #b3
+        - 38        #b4
+        - 18        #b5
+        - 17        #b6
+        - 10        #b7
+      green:
+        - 39        #g2
+        - 0         #g3.
+        - 45        #g4
+        - 48        #g5
+        - 47        #g6
+        - 21        #g7
+
+# Fuentes
+font:
+  - file: "gfonts://Roboto"
+    id: big_font1
+    size: 160
+  - file: "gfonts://Roboto"
+    id: big_font2
+    size: 80
+  - file: "gfonts://Roboto"
+    id: big_font3
+    size: 40
+
+lvgl:
+  style_definitions:
+    - id: page_style      # choose an ID for your definition
+      x: 0
+      y: 0
+      width: 100%
+      height: 100%
+      bg_color: black
+      border_width: 0
+      pad_all: 0
+      radius: 0
+  pages:
+    - id: main_page
+      widgets:
+        - obj:
+            styles: page_style
+        # Hora grande arriba
+        - label:
+            id: display_time
+            #text: "--:--:--"
+            text: "#FF0000 12#:#00FF00 34#:#0000FF 56#"  # Rojo: horas, Verde: min, Azul: seg
+            align: TOP_MID
+            text_font: big_font1
+            text_color: 0x00FF00   # Verde brillante
+            y: 20
+            recolor: true   # << habilita las etiquetas de color
+
+        # Fecha debajo
+        - label:
+            id: display_date
+            text: "--/--/----"
+            align: TOP_MID
+            text_font: big_font2
+            text_color: 0xDDDDDD   # Gris claro
+            y: 220
+        
+        - button:
+            align: BOTTOM_MID
+            y: -20
+            width: 200
+            height: 80
+            bg_color: 0x000000
+            id: btn_Page0
+            widgets:
+              - label:
+                  align: center
+                  text_font: big_font3
+                  text: "> Crono"
+            on_press:
+              - lvgl.page.show: page_cronometro
+    
+    - id: page_cronometro
+      widgets:
+        - obj:
+            styles: page_style
+        # Crono grande arriba
+        - label:
+            id: lbl_crono
+            text: "00:00:00"
+            align: TOP_MID
+            text_font: big_font1
+            text_color: 0x00FF00   # Verde brillante
+            y: 20
+
+        # Iniciar
+        - button:
+            id: btn_start
+            align: LEFT_MID
+            x: 100
+            y: 40
+            width: 200
+            height: 80
+            bg_color: 0x00AA00   
+            widgets:
+              - label:
+                  id: lbl_btn_start
+                  align: center
+                  text_font: big_font3
+                  text: "Iniciar"
+            on_press:
+              - script.execute: toggle_crono
+        
+        # Reiniciar
+        - button:
+            align: RIGHT_MID
+            x: -100
+            y: 40
+            width: 200
+            height: 80
+            bg_color: 0x0000AA
+            widgets:
+              - label:
+                  align: center
+                  text_font: big_font3
+                  text: "Reiniciar"
+            on_press:
+              - script.execute: reset_crono
+                    
+        - button:
+            align: BOTTOM_MID
+            y: -20
+            width: 200
+            height: 80
+            bg_color: 0x000000
+            id: btn_Page1
+            widgets:
+              - label:
+                  align: center
+                  text_font: big_font3
+                  text: "< Volver"
+            on_press:
+              - lvgl.page.show: main_page
+
+# Refrescar cada segundo (hora + fecha)
+interval:
+  - interval: 1s
+    then:
+      - lvgl.label.update:
+          id: display_time
+          text: !lambda |-
+            auto t = id(sntp_time).now();
+            if (t.is_valid()) {
+              /*
+              char buf[16];
+              sprintf(buf, "%02d:%02d:%02d", t.hour, t.minute, t.second);
+              return std::string(buf);
+              */
+              char buffer[50];
+              sprintf(buffer, "#FF0000 %02d#:#00FF00 %02d#:#0000FF %02d#", t.hour, t.minute, t.second);
+              return std::string(buffer);
+            }
+            return std::string("--:--:--");
+
+      - lvgl.label.update:
+          id: display_date
+          text: !lambda |-
+            auto t = id(sntp_time).now();
+            if (t.is_valid()) {
+              char buf[16];
+              sprintf(buf, "%02d/%02d/%04d", t.day_of_month, t.month, t.year);
+              return std::string(buf);
+            }
+            return std::string("--/--/----");
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(crono_running);'
+          then:
+            - lambda: |-
+                id(crono_seconds)++;
+                int h = id(crono_seconds) / 3600;
+                int m = (id(crono_seconds) % 3600) / 60;
+                int s = id(crono_seconds) % 60;
+                char buffer[10];
+                sprintf(buffer, "%02d:%02d:%02d", h, m, s);
+                lv_label_set_text(id(lbl_crono), buffer);
