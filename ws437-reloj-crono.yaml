@@ -93,7 +93,8 @@ script:
       - lambda: |-
           id(crono_running) = false;
           id(crono_seconds) = 0;
-          lv_label_set_text(id(lbl_crono), "00:00:00");
+          //lv_label_set_text(id(lbl_crono), "00:00:00");
+          lv_label_set_text(id(lbl_crono), "#FF0000 00#:#00FF00 00#:#0000FF 00#");
           lv_label_set_text(id(lbl_btn_start), "Iniciar");
           lv_obj_set_style_bg_color(id(btn_start), lv_color_hex(0x00A000), LV_PART_MAIN);  // Volver a verde
 
@@ -280,11 +281,13 @@ lvgl:
         # Crono grande arriba
         - label:
             id: lbl_crono
-            text: "00:00:00"
+            #text: "00:00:00"
+            text: "#FF0000 00#:#00FF00 00#:#0000FF 00#"  # Rojo: horas, Verde: min, Azul: seg
             align: TOP_MID
             text_font: big_font1
             text_color: 0x00FF00   # Verde brillante
             y: 20
+            recolor: true    
 
         # Iniciar
         - button:
@@ -294,6 +297,7 @@ lvgl:
             y: 40
             width: 200
             height: 80
+            radius: 30
             bg_color: 0x00AA00   
             widgets:
               - label:
@@ -311,6 +315,7 @@ lvgl:
             y: 40
             width: 200
             height: 80
+            radius: 30    
             bg_color: 0x0000AA
             widgets:
               - label:
@@ -344,11 +349,6 @@ interval:
           text: !lambda |-
             auto t = id(sntp_time).now();
             if (t.is_valid()) {
-              /*
-              char buf[16];
-              sprintf(buf, "%02d:%02d:%02d", t.hour, t.minute, t.second);
-              return std::string(buf);
-              */
               char buffer[50];
               sprintf(buffer, "#FF0000 %02d#:#00FF00 %02d#:#0000FF %02d#", t.hour, t.minute, t.second);
               return std::string(buffer);
@@ -376,6 +376,6 @@ interval:
                 int h = id(crono_seconds) / 3600;
                 int m = (id(crono_seconds) % 3600) / 60;
                 int s = id(crono_seconds) % 60;
-                char buffer[10];
-                sprintf(buffer, "%02d:%02d:%02d", h, m, s);
+                char buffer[50];
+                sprintf(buffer, "#FF0000 %02d#:#00FF00 %02d#:#0000FF %02d#", h, m, s);
                 lv_label_set_text(id(lbl_crono), buffer);
