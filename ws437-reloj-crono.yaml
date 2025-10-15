@@ -98,6 +98,44 @@ script:
           lv_label_set_text(id(lbl_btn_start), "Iniciar");
           lv_obj_set_style_bg_color(id(btn_start), lv_color_hex(0x00A000), LV_PART_MAIN);  // Volver a verde
 
+# Alternar INICIAR / PAUSAR
+  - id: script_toggle_countdown
+    then:
+      - if:
+          condition:
+            lambda: 'return !id(countdown_running);'
+          then:
+            - lambda: |-
+                id(countdown_running) = true;
+                lv_label_set_text(id(lbl_btn_countdown_start), "Pausar");
+                lv_obj_set_style_bg_color(id(btn_countdown_start), lv_color_hex(0xA00000), LV_PART_MAIN);  // Rojo
+          else:
+            - lambda: |-
+                id(countdown_running) = false;
+                lv_label_set_text(id(lbl_btn_countdown_start), "Iniciar");
+                lv_obj_set_style_bg_color(id(btn_countdown_start), lv_color_hex(0x00A000), LV_PART_MAIN);  // Verde
+
+  # Reiniciar cuenta atrás
+  - id: script_reset_countdown
+    then:
+      - lambda: |-
+          id(countdown_seconds) = 300;  // reiniciar a 5 min
+          id(countdown_running) = false;
+          lv_label_set_text(id(lbl_btn_countdown_start), "Iniciar");
+          lv_obj_set_style_bg_color(id(btn_countdown_start), lv_color_hex(0x00A000), LV_PART_MAIN);  // Volver a verde
+          lv_label_set_text(id(lbl_countdown), "#FF0000 00#:#00FF00 05#:#0000FF 00#");
+
+  # Configurar (por ejemplo, aumentar tiempo)
+  - id: script_configurar_countdown
+    then:
+      - lambda: |-
+          id(countdown_seconds) += 60; // añadir 1 minuto
+          int m = id(countdown_seconds) / 60;
+          int s = id(countdown_seconds) % 60;
+          char buffer[50];
+          sprintf(buffer, "#FF0000 00#:#00FF00 %02d#:#0000FF %02d#", m, s);
+          lv_label_set_text(id(lbl_countdown), buffer);
+          
 # Definición de variables globales
 globals:
   - id: crono_running
@@ -109,7 +147,16 @@ globals:
     type: int
     restore_value: no
     initial_value: "0"
+  
+  - id: countdown_seconds
+    type: int
+    restore_value: no
+    initial_value: '300'  # 5 minutos = 300 s
 
+  - id: countdown_running
+    type: bool
+    restore_value: no
+    initial_value: 'false'
 # Componente Web Server 
 #web_server:
 #  port: 80
@@ -265,12 +312,14 @@ lvgl:
             width: 200
             height: 80
             bg_color: 0x000000
+            border_width: 0     # 🔹 elimina el borde
+            shadow_width: 0     # 🔹 elimina sombra residual
             id: btn_Page0
             widgets:
               - label:
                   align: center
                   text_font: big_font3
-                  text: "> Crono"
+                  text: "Siguiente >"
             on_press:
               - lvgl.page.show: page_cronometro
     
@@ -288,7 +337,6 @@ lvgl:
             text_color: 0x00FF00   # Verde brillante
             y: 20
             recolor: true    
-
         # Iniciar
         - button:
             id: btn_start
@@ -306,8 +354,7 @@ lvgl:
                   text_font: big_font3
                   text: "Iniciar"
             on_press:
-              - script.execute: toggle_crono
-        
+              - script.execute: toggle_crono        
         # Reiniciar
         - button:
             align: RIGHT_MID
@@ -323,15 +370,100 @@ lvgl:
                   text_font: big_font3
                   text: "Reiniciar"
             on_press:
-              - script.execute: reset_crono
-                    
+              - script.execute: reset_crono                    
         - button:
             align: BOTTOM_MID
             y: -20
             width: 200
             height: 80
             bg_color: 0x000000
+            border_width: 0     # 🔹 elimina el borde
+            shadow_width: 0     # 🔹 elimina sombra residual
             id: btn_Page1
+            widgets:
+              - label:
+                  align: center
+                  text_font: big_font3
+                  text: "Siguiente >"
+            on_press:
+              - lvgl.page.show: page_cuenta_atras
+
+    - id: page_cuenta_atras
+      widgets:
+        - obj:
+            styles: page_style
+        
+        # Label principal (tiempo restante)
+        - label:
+            id: lbl_countdown
+            #text: "00:00:00"
+            text: "#FF0000 00#:#00FF00 05#:#0000FF 00#"  # Rojo: horas, Verde: min, Azul: seg
+            align: TOP_MID
+            text_font: big_font1
+            text_color: 0x00FF00   # Verde brillante
+            y: 20
+            recolor: true    
+
+        # Botón INICIAR / PAUSAR
+        - button:
+            id: btn_countdown_start
+            align: LEFT_MID
+            x: 20
+            y: 40
+            width: 200
+            height: 80
+            radius: 30
+            bg_color: 0x00AA00
+            widgets:
+              - label:
+                  id: lbl_btn_countdown_start
+                  align: center
+                  text_font: big_font3
+                  text: "Iniciar"
+            on_press:
+              - script.execute: script_toggle_countdown
+        
+        # Botón REINICIAR
+        - button:
+            align: RIGHT_MID
+            x: -20
+            y: 40
+            width: 200
+            height: 80
+            radius: 30
+            bg_color: 0x0000AA
+            widgets:
+              - label:
+                  align: center
+                  text_font: big_font3
+                  text: "Reiniciar"
+            on_press:
+              - script.execute: script_reset_countdown
+        # Botón CONFIGURAR (para ajustar el tiempo inicial)
+        - button:
+            align: CENTER
+            y: 40
+            width: 220
+            height: 80
+            bg_color: 0xAAAA00
+            radius: 30
+            widgets:
+              - label:
+                  align: center
+                  text_font: big_font3
+                  text: "Configurar"
+            on_press:
+              - script.execute: script_configurar_countdown
+        # Botón VOLVER
+        - button:
+            align: BOTTOM_MID
+            y: -20
+            width: 180
+            height: 80
+            bg_color: 0x000000
+            border_width: 0     # 🔹 elimina el borde
+            shadow_width: 0     # 🔹 elimina sombra residual
+            radius: 30
             widgets:
               - label:
                   align: center
@@ -379,3 +511,27 @@ interval:
                 char buffer[50];
                 sprintf(buffer, "#FF0000 %02d#:#00FF00 %02d#:#0000FF %02d#", h, m, s);
                 lv_label_set_text(id(lbl_crono), buffer);
+  
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(countdown_running) && id(countdown_seconds) > 0;'
+          then:
+            - lambda: |-
+                id(countdown_seconds)--;
+                int h = id(countdown_seconds) / 3600;
+                int m = (id(countdown_seconds) % 3600) / 60;
+                int s = id(countdown_seconds) % 60;
+                char buffer[50];
+                sprintf(buffer, "#FF0000 %02d#:#00FF00 %02d#:#0000FF %02d#", h, m, s);
+                lv_label_set_text(id(lbl_countdown), buffer);
+            - if:
+                condition:
+                  lambda: 'return id(countdown_seconds) == 0;'
+                then:
+                  - lambda: |-
+                      id(countdown_running) = false;
+                      lv_label_set_text(id(lbl_countdown), "Tiempo!");
+                      lv_label_set_text(id(lbl_btn_countdown_start), "Iniciar");
+                      lv_obj_set_style_bg_color(id(btn_start), lv_color_hex(0x00A000), LV_PART_MAIN);  // Volver a verde
