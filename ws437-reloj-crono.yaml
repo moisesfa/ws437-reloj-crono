@@ -44,6 +44,7 @@ logger:
 # Enable Home Assistant API
 api:
   password: ""
+  reboot_timeout: 0s  # ← evita reinicios automáticos
 
 ota:
   - platform: esphome
@@ -497,41 +498,54 @@ interval:
               return std::string(buf);
             }
             return std::string("--/--/----");
-  - interval: 1s
-    then:
+      
+      # Refrescar cronómetro si está en marcha      
       - if:
           condition:
             lambda: 'return id(crono_running);'
           then:
-            - lambda: |-
-                id(crono_seconds)++;
-                int h = id(crono_seconds) / 3600;
-                int m = (id(crono_seconds) % 3600) / 60;
-                int s = id(crono_seconds) % 60;
-                char buffer[50];
-                sprintf(buffer, "#FF0000 %02d#:#00FF00 %02d#:#0000FF %02d#", h, m, s);
-                lv_label_set_text(id(lbl_crono), buffer);
-  
-  - interval: 1s
-    then:
+            - lvgl.label.update:
+                id: lbl_crono
+                text: !lambda |-
+                  id(crono_seconds)++;
+                  int h = id(crono_seconds) / 3600;
+                  int m = (id(crono_seconds) % 3600) / 60;
+                  int s = id(crono_seconds) % 60;
+                  char buffer[50];
+                  snprintf(buffer, sizeof(buffer),
+                           "#FF0000 %02d#:#00FF00 %02d#:#0000FF %02d#",
+                           h, m, s);
+                  return std::string(buffer);
+      
+      # Refrescar cuenta atrás si está en marcha
       - if:
           condition:
             lambda: 'return id(countdown_running) && id(countdown_seconds) > 0;'
           then:
-            - lambda: |-
-                id(countdown_seconds)--;
-                int h = id(countdown_seconds) / 3600;
-                int m = (id(countdown_seconds) % 3600) / 60;
-                int s = id(countdown_seconds) % 60;
-                char buffer[50];
-                sprintf(buffer, "#FF0000 %02d#:#00FF00 %02d#:#0000FF %02d#", h, m, s);
-                lv_label_set_text(id(lbl_countdown), buffer);
+            - lvgl.label.update:
+                id: lbl_countdown
+                text: !lambda |-
+                  id(countdown_seconds)--;
+                  int h = id(countdown_seconds) / 3600;
+                  int m = (id(countdown_seconds) % 3600) / 60;
+                  int s = id(countdown_seconds) % 60;
+                  char buffer[50];
+                  snprintf(buffer, sizeof(buffer),
+                           "#FF0000 %02d#:#00FF00 %02d#:#0000FF %02d#",
+                           h, m, s);
+                  return std::string(buffer);
             - if:
                 condition:
                   lambda: 'return id(countdown_seconds) == 0;'
                 then:
                   - lambda: |-
                       id(countdown_running) = false;
-                      lv_label_set_text(id(lbl_countdown), "Tiempo!");
-                      lv_label_set_text(id(lbl_btn_countdown_start), "Iniciar");
-                      lv_obj_set_style_bg_color(id(btn_start), lv_color_hex(0x00A000), LV_PART_MAIN);  // Volver a verde
+                  - lvgl.label.update:
+                      id: lbl_countdown
+                      text: "Tiempo!"
+                  - lvgl.label.update:
+                      id: lbl_btn_countdown_start
+                      text: "Iniciar"
+                  - lvgl.button.update:
+                      id: btn_countdown_start
+                      bg_color: 0x00A000
